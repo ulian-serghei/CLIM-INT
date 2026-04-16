@@ -26,7 +26,7 @@ jobs:
 
     - name: Lint with flake8
       run: |
-        flake8 src/ tests/ --max-line-length=100 --ignore=E501
+        flake8 src/ tests/ --max-line-length=100 --exclude=src/bluesky-simulator,src/climaccf
 
     - name: Run tests
       run: |
