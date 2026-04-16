@@ -10,7 +10,6 @@ Usage:
     python src/data/download_opensky.py
 """
 
-import urllib.request
 from pathlib import Path
 
 
@@ -50,7 +49,7 @@ def list_available():
     print("Available months in OpenSky Zenodo dataset:")
     for month in AVAILABLE_MONTHS:
         print(f"  - {month}")
-    print(f"\nDownload from: https://zenodo.org/record/3931948")
+    print("\nDownload from: https://zenodo.org/record/3931948")
     print(f"Place files in: {OUTPUT_DIR}/")
 
 
