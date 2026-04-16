@@ -1,0 +1,39 @@
+# Data files
+data/raw/*
+data/processed/*
+data/synthetic/*
+!data/**/.gitkeep
+
+# Outputs
+outputs/*
+!outputs/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# Model weights
+*.pt
+*.pth
+*.ckpt
+
+# Large data formats
+*.nc
+*.zarr
+*.grib
