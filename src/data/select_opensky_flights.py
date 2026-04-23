@@ -41,11 +41,11 @@ ZENODO_BASE = "https://zenodo.org/record/3931948/files"
 
 # European ICAO airport prefixes (first 2 characters of ICAO code)
 EUROPEAN_ICAO_PREFIXES = (
-    'EG', 'EI', 'EK', 'EN', 'EP', 'ES', 'EY',  # UK, Ireland, Denmark, Norway, Poland, Sweden, Baltics
-    'LF', 'LI', 'LK', 'LO', 'LP', 'LS', 'LZ',  # France, Italy, Czech, Austria, Portugal, Switzerland, Slovakia
-    'LD', 'LB', 'LH', 'LG', 'LR', 'LT', 'LU',  # Croatia, Bulgaria, Hungary, Greece, Romania, Turkey, Moldova
-    'LW', 'ED', 'EB', 'EL', 'EH',               # Macedonia, Germany, Belgium, Luxembourg, Netherlands
-    'BK', 'BI', 'LY', 'LJ', 'LQ', 'LA',         # Kosovo, Iceland, Serbia, Slovenia, Bosnia, Albania
+    'EG', 'EI', 'EK', 'EN', 'EP', 'ES', 'EY',
+    'LF', 'LI', 'LK', 'LO', 'LP', 'LS', 'LZ',
+    'LD', 'LB', 'LH', 'LG', 'LR', 'LT', 'LU',
+    'LW', 'ED', 'EB', 'EL', 'EH',
+    'BK', 'BI', 'LY', 'LJ', 'LQ', 'LA',
 )
 
 RAW_DIR = Path('data/raw/opensky')
@@ -65,15 +65,16 @@ def is_european(icao_code: str) -> bool:
 
 def get_zenodo_filename(year: int, month: int) -> str:
     """Return the expected Zenodo filename for a given year/month."""
-    # Format: flightlist_YYYYMM01_YYYYMM28/30/31.csv.gz
-    # Zenodo files use first and last day of month
     import calendar
     last_day = calendar.monthrange(year, month)[1]
-    return f"flightlist_{year}{month:02d}01_{year}{month:02d}{last_day:02d}.csv.gz"
+    return (
+        f"flightlist_{year}{month:02d}01"
+        f"_{year}{month:02d}{last_day:02d}.csv.gz"
+    )
 
 
 def download_file(url: str, dest: Path) -> bool:
-    """Download a file from URL to dest with a progress bar. Returns True on success."""
+    """Download a file from URL to dest with a progress bar."""
     try:
         response = requests.get(url, stream=True, timeout=60)
         if response.status_code != 200:
@@ -104,7 +105,6 @@ def process_month(year: int, month: int) -> pd.DataFrame:
     local_gz = RAW_DIR / filename
     url = f"{ZENODO_BASE}/{filename}?download=1"
 
-    # Download if not already present
     if not local_gz.exists():
         print(f"\n[{year}-{month:02d}] Downloading {filename}...")
         success = download_file(url, local_gz)
@@ -114,14 +114,12 @@ def process_month(year: int, month: int) -> pd.DataFrame:
     else:
         print(f"\n[{year}-{month:02d}] Already downloaded, loading...")
 
-    # Load and filter
-    print(f"  Filtering for European flights...")
+    print("  Filtering for European flights...")
     with gzip.open(local_gz, 'rb') as f:
         df = pd.read_csv(io.BytesIO(f.read()))
 
     print(f"  Total flights in file: {len(df):,}")
 
-    # Filter: both origin AND destination must be European
     eu_mask = (
         df['origin'].apply(is_european) &
         df['destination'].apply(is_european)
@@ -129,16 +127,15 @@ def process_month(year: int, month: int) -> pd.DataFrame:
     df_eu = df[eu_mask].copy()
     print(f"  European flights: {len(df_eu):,}")
 
-    # Drop rows with missing critical fields
     df_eu = df_eu.dropna(subset=['callsign', 'origin', 'destination', 'typecode'])
     print(f"  After dropping missing fields: {len(df_eu):,}")
 
     if len(df_eu) == 0:
         return pd.DataFrame()
 
-    # Sample up to FLIGHTS_PER_MONTH
     n_sample = min(FLIGHTS_PER_MONTH, len(df_eu))
     df_sample = df_eu.sample(n=n_sample, random_state=42)
+    df_sample = df_sample.copy()
     df_sample['source_year'] = year
     df_sample['source_month'] = month
     print(f"  Sampled: {n_sample} flights")
@@ -156,24 +153,27 @@ def main():
             all_flights.append(df)
 
     if not all_flights:
-        print("\nNo flights collected. Check your internet connection or Zenodo availability.")
+        print("\nNo flights collected. Check your internet connection.")
         return
 
-    # Combine all months
     combined = pd.concat(all_flights, ignore_index=True)
     print(f"\n{'='*50}")
     print(f"Total flights collected: {len(combined)}")
     print(f"Years covered: {sorted(combined['source_year'].unique())}")
     print(f"Aircraft types: {combined['typecode'].nunique()} unique types")
-    print(f"Routes: {combined['origin'].nunique()} origins, {combined['destination'].nunique()} destinations")
+    n_origins = combined['origin'].nunique()
+    n_destinations = combined['destination'].nunique()
+    print(f"Routes: {n_origins} origins, {n_destinations} destinations")
 
-    # Save curated dataset
     output_file = Path('data/raw/opensky/opensky_european_curated.csv')
     combined.to_csv(output_file, index=False)
     print(f"\nSaved curated dataset to: {output_file}")
 
-    # Save summary
-    summary = combined.groupby(['source_year', 'source_month']).size().reset_index(name='flight_count')
+    summary = (
+        combined.groupby(['source_year', 'source_month'])
+        .size()
+        .reset_index(name='flight_count')
+    )
     summary_file = Path('data/raw/opensky/opensky_sampling_summary.csv')
     summary.to_csv(summary_file, index=False)
     print(f"Saved sampling summary to: {summary_file}")
