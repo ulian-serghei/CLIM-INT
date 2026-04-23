@@ -1,6 +1,10 @@
 """
 Download and filter European flight trajectories from the OpenSky Network
-Zenodo dataset (DOI: 10.5281/zenodo.3931948).
+Zenodo dataset.
+
+Records used:
+  - 2019:      DOI 10.5281/zenodo.3931948
+  - 2020-2022: DOI 10.5281/zenodo.6348857
 
 Downloads monthly flightlist CSV files, filters for European flights,
 and samples a target number of flights per month.
@@ -23,21 +27,25 @@ from tqdm import tqdm
 # Configuration
 # ---------------------------------------------------------------------------
 
-# Months to download: (year, month) — 2 per year, spread across 2019-2024
+# Months to download — adjusted to available Zenodo records (2019-2022)
+# 3 months per year, spread across seasons
 TARGET_MONTHS = [
-    (2019, 1), (2019, 7),
-    (2020, 4), (2020, 10),
-    (2021, 1), (2021, 7),
-    (2022, 4), (2022, 10),
-    (2023, 1), (2023, 7),
-    (2024, 4), (2024, 7),
+    (2019, 1), (2019, 6), (2019, 10),
+    (2020, 1), (2020, 7), (2020, 10),
+    (2021, 2), (2021, 6), (2021, 11),
+    (2022, 3), (2022, 7), (2022, 10),
 ]
+
+# Zenodo record URLs per year
+ZENODO_RECORDS = {
+    2019: "https://zenodo.org/record/3931948/files",
+    2020: "https://zenodo.org/record/6348857/files",
+    2021: "https://zenodo.org/record/6348857/files",
+    2022: "https://zenodo.org/record/6348857/files",
+}
 
 # Target flights to sample per month
 FLIGHTS_PER_MONTH = 35  # 35 x 12 = 420 total, within 200-500 range
-
-# Zenodo base URL
-ZENODO_BASE = "https://zenodo.org/record/3931948/files"
 
 # European ICAO airport prefixes (first 2 characters of ICAO code)
 EUROPEAN_ICAO_PREFIXES = (
@@ -78,7 +86,7 @@ def download_file(url: str, dest: Path) -> bool:
     try:
         response = requests.get(url, stream=True, timeout=60)
         if response.status_code != 200:
-            print(f"  HTTP {response.status_code} — file may not exist for this month")
+            print(f"  HTTP {response.status_code} — file not found at: {url}")
             return False
 
         total = int(response.headers.get('content-length', 0))
@@ -103,7 +111,8 @@ def process_month(year: int, month: int) -> pd.DataFrame:
     """Download, filter, and sample European flights for one month."""
     filename = get_zenodo_filename(year, month)
     local_gz = RAW_DIR / filename
-    url = f"{ZENODO_BASE}/{filename}?download=1"
+    base_url = ZENODO_RECORDS[year]
+    url = f"{base_url}/{filename}?download=1"
 
     if not local_gz.exists():
         print(f"\n[{year}-{month:02d}] Downloading {filename}...")
@@ -127,15 +136,16 @@ def process_month(year: int, month: int) -> pd.DataFrame:
     df_eu = df[eu_mask].copy()
     print(f"  European flights: {len(df_eu):,}")
 
-    df_eu = df_eu.dropna(subset=['callsign', 'origin', 'destination', 'typecode'])
+    df_eu = df_eu.dropna(
+        subset=['callsign', 'origin', 'destination', 'typecode']
+    )
     print(f"  After dropping missing fields: {len(df_eu):,}")
 
     if len(df_eu) == 0:
         return pd.DataFrame()
 
     n_sample = min(FLIGHTS_PER_MONTH, len(df_eu))
-    df_sample = df_eu.sample(n=n_sample, random_state=42)
-    df_sample = df_sample.copy()
+    df_sample = df_eu.sample(n=n_sample, random_state=42).copy()
     df_sample['source_year'] = year
     df_sample['source_month'] = month
     print(f"  Sampled: {n_sample} flights")
